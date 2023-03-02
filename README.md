@@ -1,2 +1,11 @@
-# alx-files_manager
-File Manager Platform
+# File Manager Platform
+This project is a summary of the back-end trimester: authentication, NodeJS, MongoDB, Redis, pagination and background processing.
+
+The objective is to build a simple platform to upload and view files:
+
+* User authentication via a token
+* List all files
+* Upload a new file
+* Change permission of a file
+* View a file
+* Generate thumbnails for images
