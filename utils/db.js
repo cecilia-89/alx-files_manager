@@ -32,7 +32,8 @@ class DBClient {
   }
 
   async uploadUser(user) {
-    await this.db.collection('users').insertOne(user);
+    const response = await this.db.collection('users').insertOne(user);
+    return response;
   }
 
   async uploadFile(file) {
@@ -65,16 +66,16 @@ class DBClient {
 
   async findFile(filter) {
     let file;
+    const id = filter._id;
     if (filter._id) {
       let filesFound = [];
       if (Object.keys(filter).length > 1) {
-        const _filter = JSON.parse(JSON.stringify(filter));
-        delete _filter._id;
-        filesFound = await this.db.collection('files').find(_filter).toArray();
+        delete filter._id;
+        filesFound = await this.db.collection('files').find(filter).toArray();
       } else {
         filesFound = await this.db.collection('files').find({}).toArray();
       }
-      file = filesFound.filter((value) => filter._id === value._id.toString());
+      file = filesFound.filter((value) => id === value._id.toString());
       if (file.length === 1) {
         file[0].id = file[0]._id;
         delete file[0]._id;
@@ -87,7 +88,6 @@ class DBClient {
   }
 
   async findFiles(userId, parentId, page, size) {
-    console.log(userId, parentId, page, size);
     let files = await this.db.collection('files').aggregate([
       { $match: { userId, parentId } },
       { $sort: { type: 1, name: 1 } },
@@ -95,9 +95,18 @@ class DBClient {
       { $set: { id: '$_id' } },
       { $limit: size },
       { $project: { _id: 0, localPath: 0 } }]);
-    console.log(await files.toArray());
     files = await files.toArray();
     return files;
+  }
+
+  async filePublish(filter) {
+    const response = await this.db.collection('files').updateOne(filter, { $set: { isPublic: true } });
+    return response;
+  }
+
+  async fileUnpublish(filter) {
+    const response = await this.db.collection('files').updateOne(filter, { $set: { isPublic: false } });
+    return response;
   }
 }
 

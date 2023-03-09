@@ -1,7 +1,7 @@
 const fs = require('fs');
 const fsP = require('fs/promises');
 const { uuid } = require('uuidv4');
-const imageThumbnail = require('image-thumbnail');
+const mime = require('mime-types');
 const redisClient = require('../utils/redis');
 const dbClient = require('../utils/db');
 
@@ -17,12 +17,9 @@ class FilesController {
       throw new Error('Internal error');
     }
     const userId = await this.redis.get(`auth_${token}`);
-    console.log(token, file);
-    console.log(userId);
     if (userId) {
       let id = '';
       const user = await this.db.findUser({ _id: userId });
-      console.log(user);
       if (Object.keys(user).length > 0) {
         file.userId = user._id;
         if (!file.isPublic || file.isPublic !== true) {
@@ -54,8 +51,8 @@ class FilesController {
           const content = Buffer.from(file.data, 'base64').toString();
           await fsP.writeFile(`${localPath}/${file.name}`, content);
         } else if (file.type === 'image') {
-          const thumbnail = await imageThumbnail(file.data);
-          await fsP.writeFile(`${localPath}/${file.name}`, thumbnail);
+          const image = Buffer.from(file.data, 'base64');
+          await fsP.writeFile(`${localPath}/${file.name}`, image);
         }
         newFile.localPath = localPath;
         const insertResult = await this.db.uploadFile(newFile);
@@ -63,7 +60,6 @@ class FilesController {
         newFile.id = id;
         delete newFile.localPath;
         delete newFile._id;
-        console.log('created', newFile);
         return newFile;
       }
     }
@@ -75,7 +71,6 @@ class FilesController {
       throw new Error('Internal Error');
     }
     const parent = await this.db.findFile({ _id: parentId });
-    console.log(parent);
     if (Object.keys(parent).length > 0) {
       if (parent.type !== 'folder') {
         throw new Error('Parent is not a folder');
@@ -89,7 +84,6 @@ class FilesController {
 
   async getShow(token, id) {
     if (!token || !id) {
-      console.log('error internal');
       throw new Error('Internal error');
     }
     const userId = await this.redis.get(`auth_${token}`);
@@ -98,6 +92,7 @@ class FilesController {
       if (Object.keys(user).length > 0) {
         const file = await this.db.findFile({ _id: id, userId: user.id });
         if (Object.keys(file).length > 0) {
+          delete file.localPath;
           return file;
         }
         throw new Error('Not found');
@@ -117,12 +112,125 @@ class FilesController {
       const parent = await this.db.findFile({ _id: parentId });
       if (Object.keys(parent).length > 0) {
         parentId = parent.id;
+      } else if (parentId === '0') {
+        parentId = 0;
       }
       if (Object.keys(user).length > 0) {
         const size = 4;
         const files = await this.db.findFiles(user.id, parentId, page, size);
         return files;
       }
+    }
+    throw new Error('Unauthorized');
+  }
+
+  async putPublish(token, id) {
+    if (!token || !id) {
+      throw new Error('Internal Error');
+    }
+    const userId = await this.redis.get(`auth_${token}`);
+    if (userId) {
+      const user = await this.db.findUser({ _id: userId });
+      if (Object.keys(user).length > 0) {
+        let file = await this.db.findFile({ _id: id, userId: user.id });
+        if (Object.keys(file).length > 0) {
+          const filter = { _id: file.id, userId: user.id };
+          await this.db.filePublish(filter);
+          file = await this.db.findFile({ _id: id, userId: user.id });
+          const responseFile = {
+            id: file.id,
+            userId: user.id,
+            name: file.name,
+            type: file.type,
+            isPublic: file.isPublic,
+            parentId: file.parentId,
+          };
+          return responseFile;
+        }
+        throw new Error('Not found');
+      }
+    }
+    throw new Error('Unauthorzsed');
+  }
+
+  async putUnpublish(token, id) {
+    if (!token || !id) {
+      throw new Error('Internal Error');
+    }
+    const userId = await this.redis.get(`auth_${token}`);
+    if (userId) {
+      const user = await this.db.findUser({ _id: userId });
+      if (Object.keys(user).length > 0) {
+        let file = await this.db.findFile({ _id: id, userId: user.id });
+        if (Object.keys(file).length > 0) {
+          const filter = { _id: file.id, userId: user.id };
+          await this.db.fileUnpublish(filter);
+          file = await this.db.findFile({ _id: id, userId: user.id });
+          const responseFile = {
+            id: file.id,
+            userId: user.id,
+            name: file.name,
+            type: file.type,
+            isPublic: file.isPublic,
+            parentId: file.parentId,
+          };
+          return responseFile;
+        }
+        throw new Error('Not found');
+      }
+    }
+    throw new Error('Unauthorized');
+  }
+
+  async getFile(token, id, size) {
+    if (!id) {
+      throw new Error('Internal error');
+    }
+    const userId = await this.redis.get(`auth_${token}`);
+    const file = await this.db.findFile({ _id: id });
+    if (Object.keys(file).length > 0) {
+      const path = file.localPath;
+      let data;
+      let type;
+      if (file.type === 'folder') {
+        throw new Error("A folder doesn't have content");
+      }
+      if (!fs.existsSync(`${path}/${file.name}`)) {
+        throw new Error('Not found');
+      }
+      const sizes = ['500', '250', '100'];
+      let width = '';
+      if (size !== '' && sizes.includes(size) && file.type === 'image') {
+        width = `_${size}`;
+      }
+      const splitName = file.name.split('.');
+      let name;
+      if (file.isPublic) {
+        if (file.type === 'image') {
+          data = await fsP.readFile(`${path}/${splitName[0]}${width}.${splitName[1]}`);
+        } else {
+          data = await fsP.readFile(`${path}/${splitName[0]}${width}.${splitName[1]}`, { encoding: 'utf-8' });
+        }
+        name = `${splitName[0]}${width}.${splitName[1]}`;
+        type = mime.lookup(name);
+        return { data, type };
+      } if (userId) {
+        const user = await this.db.findUser({ _id: userId });
+        if (Object.keys(user).length > 0) {
+          if (file.type === 'image') {
+            data = await fsP.readFile(`${path}/${splitName[0]}${width}.${splitName[1]}`);
+          } else {
+            data = await fsP.readFile(`${path}/${splitName[0]}${width}.${splitName[1]}`, { encoding: 'utf-8' });
+          }
+          name = `${splitName[0]}${width}.${splitName[1]}`;
+          type = mime.lookup(name);
+          return { data, type };
+        }
+      } else {
+        throw new Error('Unauthorized');
+      }
+    } else {
+      throw new Error('Not found');
     }
     throw new Error('Unauthorized');
   }

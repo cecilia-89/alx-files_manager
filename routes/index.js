@@ -1,3 +1,6 @@
+import fileQueue from '../worker';
+import userQueue from '../worker';
+
 const appcontroller = require('../controllers/AppController');
 const userscontroller = require('../controllers/UsersController');
 const authcontroller = require('../controllers/AuthController');
@@ -29,6 +32,7 @@ function routes(app) {
     } else {
       try {
         const newUser = await userscontroller.postNew(userJson);
+        userQueue.add({ userId: newUser.id });
         res.send(newUser);
       } catch (err) {
         if (err.toString() === 'Error: Internal error') {
@@ -151,6 +155,9 @@ function routes(app) {
     if (token) {
       try {
         const newFile = await filescontroller.postUpload(token, fileJson);
+        if (newFile.type === 'image') {
+          fileQueue.add({ userId: newFile.userId, fileId: newFile.id });
+        }
         res.status(201);
         res.send(newFile);
       } catch (err) {
@@ -215,6 +222,80 @@ function routes(app) {
         }
         res.send({ error: err.toString().slice(7) });
       }
+    }
+  });
+
+  app.put('/files/:id/publish', async (req, res) => {
+    const { id } = req;
+    const token = req.header('X-Token');
+    if (!token) {
+      res.status(400);
+      res.send({ Error: 'Missing token' });
+    }
+    if (token) {
+      try {
+        const response = await filescontroller.putPublish(token, id);
+        res.send(response);
+        return;
+      } catch (err) {
+        if (err.toString() === 'Error: Internal error') {
+          res.status(500);
+        } else if (err.toString() === 'Error: Not found') {
+          res.status(404);
+        } else {
+          res.status(401);
+        }
+        res.send({ error: err.toString().slice(7) });
+      }
+    }
+  });
+
+  app.put('/files/:id/unpublish', async (req, res) => {
+    const { id } = req;
+    const token = req.header('X-Token');
+    if (!token) {
+      res.status(400);
+      res.send({ Error: 'Missing token' });
+    }
+    if (token) {
+      try {
+        const response = await filescontroller.putUnpublish(token, id);
+        res.send(response);
+        return;
+      } catch (err) {
+        if (err.toString() === 'Error: Internal error') {
+          res.status(500);
+        } else if (err.toString() === 'Error: Not found') {
+          res.status(404);
+        } else {
+          res.status(401);
+        }
+        res.send({ error: err.toString().slice(7) });
+      }
+    }
+  });
+
+  app.get('/files/:id/data', async (req, res) => {
+    const token = req.header('X-Token');
+    const { id } = req;
+    const size = req.query.size ? req.query.size : '';
+
+    try {
+      const data = await filescontroller.getFile(token, id, size);
+      res.setHeader('Content-type', data.type);
+      if (data.type === 'image') {
+        res.end(data.data, 'binary');
+      }
+      res.send(data.data);
+    } catch (err) {
+      if (err.toString() === 'Error: Internal error') {
+        res.status(500);
+      } else if (err.toString() === 'Error: Not found') {
+        res.status(404);
+      } else {
+        res.status(400);
+      }
+      res.send({ error: err.toString().slice(7) });
     }
   });
 }

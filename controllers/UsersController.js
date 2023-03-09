@@ -37,7 +37,7 @@ class UsersController {
       const user = await this.db.findUser({ _id: userId });
       if (Object.keys(user).length > 0) {
         return {
-          id: user._id,
+          id: user.id,
           email: user.email,
         };
       }

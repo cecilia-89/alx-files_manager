@@ -15,7 +15,7 @@ else:
     parentId = sys.argv[3]
 r_json = { 'name': file_name, 'type': 'image', 'isPublic': True, 'data': file_encoded, 'parentId': parentId }
 r_headers = { 'X-Token': sys.argv[2] }
-print(r_json)
+# print(r_json)
 
 r = requests.post("http://127.0.0.1:5000/files", json=r_json, headers=r_headers)
 print(r.json())
