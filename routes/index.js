@@ -1,6 +1,5 @@
-import fileQueue from '../worker';
-import userQueue from '../worker';
-
+const { fileQueue } = require('../worker');
+const { userQueue } = require('../worker');
 const appcontroller = require('../controllers/AppController');
 const userscontroller = require('../controllers/UsersController');
 const authcontroller = require('../controllers/AuthController');

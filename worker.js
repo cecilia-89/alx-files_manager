@@ -29,7 +29,7 @@ fileQueue.process(async (job, done) => {
             width,
             height: width * (metadata.height / metadata.width),
           };
-          const image = imageThumbnail(`${path}/${file.name}`, options).then();
+          const image = await imageThumbnail(`${path}/${file.name}`, options);
           await fsP.writeFile(`${path}/${splitName[0]}_${width}.${splitName[1]}`, image);
         }
         console.log('done', job.data.fileId);
@@ -69,5 +69,4 @@ userQueue.process(async (job, done) => {
   }
 });
 
-module.exports = userQueue;
-module.exports = fileQueue;
+module.exports = { userQueue, fileQueue };
